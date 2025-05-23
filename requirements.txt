@@ -1,0 +1,9 @@
+flask
+librosa
+numpy
+pandas
+tensorflow
+matplotlib
+SpeechRecognition
+PyAudio
+openai-whisper

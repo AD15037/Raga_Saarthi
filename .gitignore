@@ -1,0 +1,23 @@
+flask_session/
+Jupyter Notebooks/
+Kaggle Recordings/
+Raga Recordings/
+static/
+templates/
+uploads/
+user_data/
+venv/
+
+# Large files by extension
+*.wav
+*.mp3
+
+# Python cached files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# OS specific files
+.DS_Store
+Thumbs.db
