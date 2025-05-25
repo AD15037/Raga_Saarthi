@@ -23,7 +23,7 @@ from flask import send_from_directory
 import json
 from datetime import datetime
 import joblib
-from speech_to_text import speech_to_text
+from speech_to_text import speech_to_text   # Import the speech-to-text function from "speech_to_text.py" file
 
 # New imports for user management and ML personalization
 from flask_bcrypt import Bcrypt
