@@ -23,7 +23,6 @@ from flask import send_from_directory
 import json
 from datetime import datetime
 import joblib
-from speech_to_text import speech_to_text   # Import the speech-to-text function from "speech_to_text.py" file
 
 # New imports for user management and ML personalization
 from flask_bcrypt import Bcrypt
@@ -268,7 +267,7 @@ def analyze_vocal_characteristics(audio_data, sr):
         "breath_control": float(breath_control)
     }
 
-def evaluate_performance(audio_data, sr, raga_info, transcribed_text=None):
+def evaluate_performance(audio_data, sr, raga_info):
     """
     Evaluate a user's performance against raga characteristics
     Returns metrics and feedback
@@ -397,23 +396,6 @@ def evaluate_performance(audio_data, sr, raga_info, transcribed_text=None):
                         for k, v in rhythm_metrics.items() if k != 'drift_direction'}
         })
     
-    # Analyze pronunciation if transcribed_text is available
-    pronunciation_score = 0.0
-    if transcribed_text:
-        # Simple analysis of lyrics presence
-        # A more sophisticated analysis would compare with a reference
-        words = transcribed_text.strip().split()
-        if len(words) > 5:
-            pronunciation_score = 70.0 + min(30.0, len(words) * 0.5)
-        else:
-            pronunciation_score = max(40.0, len(words) * 10.0)
-        
-        feedback.append({
-            "type": "pronunciation",
-            "area": "lyrics",
-            "message": "Continue practicing clear pronunciation of lyrics while maintaining the raga structure."
-        })
-    
     # Return evaluation results
     return {
         "overall_score": float(overall_score),
@@ -424,7 +406,6 @@ def evaluate_performance(audio_data, sr, raga_info, transcribed_text=None):
         },
         "vadi_samvadi_accuracy": float(vadi_samvadi_accuracy),
         "rhythm_stability": float(rhythm_stability),
-        "pronunciation_score": float(pronunciation_score) if transcribed_text else None,
         "detected_patterns": {
             "vadi_samvadi": vadi_samvadi_performed,
             "gamaka_features": [float(x) for x in gamaka_features]
@@ -1755,7 +1736,7 @@ def register_user():
     # Create user profile
     profile = {
         "username": username,
-        "password_hash": password_hash,
+                             "password_hash": password_hash,
         "created_at": datetime.now().isoformat(),
         "practice_sessions": 0,
         "total_practice_time": 0,
@@ -1899,18 +1880,11 @@ def analyze_performance():
         # Load audio
         y_audio, sr = librosa.load(temp_path, sr=None)
         
-        # Transcribe lyrics if present (optional)
-        transcribed_text = None
-        try:
-            transcribed_text = speech_to_text(temp_path)
-        except Exception as e:
-            print(f"Error transcribing speech: {e}")
-        
         # Analyze vocal characteristics
         vocal_characteristics = analyze_vocal_characteristics(y_audio, sr)
         
         # Evaluate performance
-        performance_results = evaluate_performance(y_audio, sr, raga_info, transcribed_text)
+        performance_results = evaluate_performance(y_audio, sr, raga_info)
         
         # Add raga and timestamp to performance data
         performance_results["raga"] = raga_name
@@ -1932,10 +1906,6 @@ def analyze_performance():
                 "achievements": updated_profile["achievements"]
             }
         }
-        
-        # Add transcription if available
-        if transcribed_text:
-            response_data["transcription"] = transcribed_text
         
         # Create audio analysis visualization
         analysis_results = analyze_audio_signal(y_audio, sr)
