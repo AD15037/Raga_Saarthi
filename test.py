@@ -24,9 +24,6 @@ import json
 from datetime import datetime
 import joblib
 from speech_to_text import speech_to_text   # Import the speech-to-text function from "speech_to_text.py" file
-import logging
-import crepe
-from dtw import dtw
 
 # New imports for user management and ML personalization
 from flask_bcrypt import Bcrypt
@@ -35,9 +32,6 @@ import random
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.linear_model import LinearRegression
 import shutil
-
-# Setup logging
-logging.basicConfig(level=logging.DEBUG)
 
 app = Flask(__name__, static_url_path='/static', static_folder='static')
 bcrypt = Bcrypt(app)
@@ -280,28 +274,68 @@ def evaluate_performance(audio_data, sr, raga_info, transcribed_text=None):
         if vadi_samvadi_performed[1] == expected_samvadi:
             vadi_samvadi_accuracy += 50
     
-    # Calculate rhythm stability if possible
-    rhythm_stability = 0.0
-    try:
-        # Detect onsets
-        onset_env = librosa.onset.onset_strength(y=audio_data, sr=sr)
-        onsets = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr)
-        if len(onsets) > 1:
-            # Calculate inter-onset intervals
-            iois = np.diff(librosa.frames_to_time(onsets, sr=sr))
-            # Rhythm stability is inversely related to IOI variance
-            rhythm_stability = 100.0 - min(100.0, (np.std(iois) / np.mean(iois)) * 100.0)
-    except:
-        pass
+    # Calculate rhythm stability with enhanced analysis
+    rhythm_metrics = analyze_rhythm_stability(audio_data, sr)
+    rhythm_stability = rhythm_metrics['overall_rhythm_score']
     
-    # Calculate overall performance score
+    # Calculate overall performance score (IMPROVED ALGORITHM)
     aaroh_avroh_score = (aaroh_adherence + avroh_adherence) / 2 if avroh else aaroh_adherence
     structure_score = 0.5 * aaroh_avroh_score + 0.5 * pakad_adherence if pakad else aaroh_avroh_score
     
-    # Overall score combines structure adherence, vadi/samvadi accuracy and rhythm stability
-    overall_score = 0.6 * structure_score + 0.2 * vadi_samvadi_accuracy + 0.2 * rhythm_stability
+    # Normalize scores to ensure they're in 0-100 range
+    structure_score = max(0, min(100, structure_score))
+    vadi_samvadi_accuracy = max(0, min(100, vadi_samvadi_accuracy))
+    rhythm_stability = max(0, min(100, rhythm_stability))
+
+    # Calculate gamaka execution score based on detected features
+    gamaka_execution = 0
+    if len(gamaka_features) > 0:
+        # Convert gamaka feature vector to a skill score
+        # Higher oscillation count and movement percentage are good indicators
+        gamaka_execution = min(100, 50 + 20 * gamaka_features[0] + 30 * gamaka_features[3])
+
+    # Calculate pronunciation score if transcription is available
+    pronunciation_score = 0.0
+    if transcribed_text:
+        words = transcribed_text.strip().split()
+        if len(words) > 5:
+            pronunciation_score = 70.0 + min(30.0, len(words) * 0.5)
+        else:
+            pronunciation_score = max(40.0, len(words) * 10.0)
+        pronunciation_score = max(0, min(100, pronunciation_score))
     
-    # Generate feedback based on performance
+    # IMPROVED: Calculate weighted overall score with more factors
+    weights = {
+        'structure': 0.50,      # Adherence to aaroh/avroh and pakad (increased weight)
+        'rhythm': 0.30,         # Rhythm stability (unchanged)
+        'gamaka': 0.20          # Proper execution of gamakas (increased weight)
+    }
+    
+    # Add pronunciation weight if available
+    if transcribed_text:
+        for key in weights:
+            weights[key] *= 0.85  # Reduce other weights to make room for pronunciation
+        weights['pronunciation'] = 0.15
+        
+    # Calculate final weighted score
+    overall_score = (
+        weights['structure'] * structure_score +
+        weights['rhythm'] * rhythm_stability +
+        weights['gamaka'] * gamaka_execution
+    )
+    
+    if transcribed_text:
+        overall_score += weights['pronunciation'] * pronunciation_score
+    
+    # Apply a confidence-based adjustment
+    # If we detect very few swaras, we're less confident in our evaluation
+    confidence_factor = min(1.0, len(detected_swaras) / 20)
+    
+    # For low confidence evaluations, bring score closer to a neutral value (70)
+    if confidence_factor < 0.5:
+        overall_score = overall_score * confidence_factor + 70 * (1 - confidence_factor)
+    
+    # Generate feedback based on performance (same as before)
     feedback = []
     
     # Structure feedback
@@ -335,15 +369,32 @@ def evaluate_performance(audio_data, sr, raga_info, transcribed_text=None):
         })
     
     # Rhythm feedback
-    if rhythm_stability < 70:
+    if rhythm_metrics['overall_rhythm_score'] < 70:
+        # Basic rhythm stability feedback
+        feedback_message = "Work on maintaining consistent rhythm throughout your performance."
+        
+        # Add specific feedback based on detailed metrics
+        if rhythm_metrics.get('tempo_stability', 100) < 60:
+            feedback_message = "Focus on maintaining a steady tempo. Try practicing with a metronome."
+        
+        drift_direction = rhythm_metrics.get('drift_direction', '')
+        drift_severity = rhythm_metrics.get('drift_severity', 0)
+        
+        if drift_severity > 30:
+            if drift_direction == "rushing":
+                feedback_message = "You tend to rush (speed up) during your performance. Focus on maintaining a steady tempo and practice with a metronome."
+            elif drift_direction == "slowing":
+                feedback_message = "You tend to slow down during your performance. Build stamina and concentration to maintain a consistent tempo throughout."
+        
         feedback.append({
             "type": "rhythm",
             "area": "stability",
-            "message": "Work on maintaining consistent rhythm throughout your performance."
+            "message": feedback_message,
+            "metrics": {k: float(v) if isinstance(v, (int, float, np.number)) else v 
+                        for k, v in rhythm_metrics.items() if k != 'drift_direction'}
         })
     
     # Analyze pronunciation if transcribed_text is available
-    pronunciation_score = 0.0
     if transcribed_text:
         # Simple analysis of lyrics presence
         # A more sophisticated analysis would compare with a reference
@@ -369,6 +420,7 @@ def evaluate_performance(audio_data, sr, raga_info, transcribed_text=None):
         },
         "vadi_samvadi_accuracy": float(vadi_samvadi_accuracy),
         "rhythm_stability": float(rhythm_stability),
+        "gamaka_execution": float(gamaka_execution),
         "pronunciation_score": float(pronunciation_score) if transcribed_text else None,
         "detected_patterns": {
             "vadi_samvadi": vadi_samvadi_performed,
@@ -389,15 +441,7 @@ try:
     # Load feature extraction parameters
     with open("models/feature_params.pkl", "rb") as f:
         feature_params = pickle.load(f)
-        n_mels = feature_params.get("n_mels", 128)
-        n_chroma = feature_params.get("n_chroma", 12)
-        n_contrast = feature_params.get("n_contrast", 7)
-        max_time_steps = feature_params.get("max_time_steps", 109)
     
-    # Load scaler
-    with open("models/scaler.pkl", "rb") as f:
-        scaler = pickle.load(f)
-
     # Set model_loaded flag
     model_loaded = True
 except Exception as e:
@@ -436,99 +480,6 @@ SWARA_MAPPING = {
     'B': 'N',   # Shuddha Nishad
 }
 
-# Preprocessing functions
-def remove_silence(audio, sr, top_db=20):
-    try:
-        non_silent = librosa.effects.split(audio, top_db=top_db)
-        audio_clean = np.concatenate([audio[start:end] for start, end in non_silent]) if non_silent.size else audio
-        return audio_clean
-    except Exception as e:
-        logging.error(f"Error removing silence: {e}")
-        return audio
-
-def normalize_audio(audio):
-    max_abs = np.max(np.abs(audio))
-    return audio / max_abs if max_abs != 0 else audio
-
-# Feature extraction function - Updated to match training_model.py
-def features_extractor(file, n_mels=128, n_chroma=12, n_contrast=7, max_time_steps=109):
-    try:
-        audio, sr = librosa.load(file, sr=None, duration=30)
-        audio = remove_silence(audio, sr)
-        audio = normalize_audio(audio)
-        
-        # Log-mel spectrogram
-        mel_spec = librosa.feature.melspectrogram(y=audio, sr=sr, n_mels=n_mels)
-        log_mel_spec = librosa.power_to_db(mel_spec)
-        
-        # Chroma features
-        chroma = librosa.feature.chroma_stft(y=audio, sr=sr, n_chroma=n_chroma)
-        
-        # Temporal features (onset strength)
-        onset_env = librosa.onset.onset_strength(y=audio, sr=sr)
-        onset_features = np.array([np.mean(onset_env), np.std(onset_env)])
-        onset_features_2d = np.repeat(onset_features[:, np.newaxis], max_time_steps, axis=1)
-        
-        # Spectral contrast
-        spectral_contrast = librosa.feature.spectral_contrast(y=audio, sr=sr, n_bands=n_contrast-1)
-        
-        # Pad or truncate to fixed length
-        for spec in [log_mel_spec, chroma, onset_features_2d, spectral_contrast]:
-            if spec.shape[1] < max_time_steps:
-                pad_width = max_time_steps - spec.shape[1]
-                spec = np.pad(spec, ((0, 0), (0, pad_width)), mode='constant')
-            else:
-                spec = spec[:, :max_time_steps]
-        
-        # Concatenate features
-        combined_spec = np.concatenate([log_mel_spec, chroma, onset_features_2d, spectral_contrast], axis=0)
-        
-        # Normalize features
-        combined_spec_reshaped = combined_spec.reshape(1, -1)
-        combined_spec_normalized = scaler.transform(combined_spec_reshaped).reshape(combined_spec.shape)
-        
-        logging.debug(f"Extracted features shape: {combined_spec_normalized.shape}")
-        return combined_spec_normalized[:, :, np.newaxis]
-    except Exception as e:
-        logging.error(f"Error processing {file}: {e}")
-        return None
-
-# Segment-based feature extraction
-def segment_features(file, segment_length=5):
-    try:
-        audio, sr = librosa.load(file, sr=None)
-        duration = librosa.get_duration(y=audio, sr=sr)
-        segments = []
-        for start in np.arange(0, duration, segment_length):
-            end = min(start + segment_length, duration)
-            segment = audio[int(start * sr):int(end * sr)]
-            segments.append((segment, sr))
-        
-        all_features = []
-        for segment, sr in segments:
-            temp_path = os.path.join("temp", f"segment_{uuid.uuid4().hex}.wav")
-            os.makedirs("temp", exist_ok=True)
-            librosa.output.write_wav(temp_path, segment, sr)
-            feature = features_extractor(temp_path)
-            if feature is not None:
-                all_features.append(feature)
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-        
-        return np.array(all_features) if all_features else None
-    except Exception as e:
-        logging.error(f"Error in segment_features: {e}")
-        return None
-
-# Pitch detection using CREPE
-def get_pitch(audio, sr):
-    try:
-        time, frequency, confidence, _ = crepe.predict(audio, sr, viterbi=True)
-        return frequency[confidence > 0.5]
-    except Exception as e:
-        logging.error(f"Error in pitch detection: {e}")
-        return np.array([])
-
 # Utility: extract swara tokens from a pattern string
 def tokenize_swaras(swara_string):
     return [note.strip() for note in swara_string.replace('-', ' ').replace(',', ' ').split() if note.strip()]
@@ -537,33 +488,12 @@ def tokenize_swaras(swara_string):
 def match_score(input_seq, rule_seq):
     return SequenceMatcher(None, input_seq, rule_seq).ratio() * 100
 
-# Rule-based matching with DTW
-def match_score_dtw(input_seq, rule_seq):
-    try:
-        # Convert sequences to numerical values for DTW
-        swara_to_num = {swara: idx for idx, swara in enumerate(set(input_seq + rule_seq))}
-        input_num = [swara_to_num[swara] for swara in input_seq]
-        rule_num = [swara_to_num[swara] for swara in rule_seq]
-        distance, _ = dtw(input_num, rule_num, dist=lambda x, y: abs(x - y))
-        return 100 * (1 - distance / max(len(input_seq), len(rule_seq)))
-    except Exception:
-        return match_score(input_seq, rule_seq)  # Fallback to SequenceMatcher
-
-# Create pitch histogram with 24 bins
-def create_pitch_histogram(pitch_values, sr=22050, bins=24):
-    valid_pitch = pitch_values[pitch_values > 0]
-    if len(valid_pitch) == 0:
-        return np.zeros(bins)
-    cents = 1200 * np.log2(valid_pitch / 261.63)
-    pitch_classes = (cents / 50) % 24  # 50 cents per bin
-    histogram, _ = np.histogram(pitch_classes, bins=bins, range=(0, 24), density=True)
-    return histogram / np.sum(histogram) if histogram.sum() != 0 else histogram
-
 # Improved: Match raga based on pakad, aaroh-avroh, and characteristic phrases
 def find_best_matching_raga(pitch_notes, pitch_histogram=None, vadi_samvadi=None, gamaka_features=None):
     if not raga_rules_loaded:
         return "Unknown", 0, {}
     
+    # Initialize result dictionary to store detailed matching scores
     matching_scores = {}
     best_raga = None
     best_score = 0
@@ -574,39 +504,36 @@ def find_best_matching_raga(pitch_notes, pitch_histogram=None, vadi_samvadi=None
         aaroh_avroh = row.get('aaroh_-_avroh', '')
         pakad = row.get('pakad', '')
 
-        # Enhanced sequence matching with DTW
+        # Basic sequence matching
         rule_tokens = tokenize_swaras(f"{aaroh_avroh} {pakad}")
-        sequence_score = match_score_dtw(pitch_notes, rule_tokens)
+        sequence_score = match_score(pitch_notes, rule_tokens)
         
-        # Pakad-specific matching
-        pakad_tokens = tokenize_swaras(pakad)
-        pakad_score = match_score_dtw(pitch_notes, pakad_tokens) if pakad_tokens else sequence_score
+        # Initialize final score with the sequence matching score
+        final_score = sequence_score
+        score_details = {"sequence_match": sequence_score}
         
-        final_score = 0.4 * sequence_score + 0.4 * pakad_score
-        score_details = {"sequence_match": sequence_score, "pakad_match": pakad_score}
-        
-        # Pitch histogram matching
+        # Add pitch histogram matching if available
         if pitch_histogram is not None and 'pitch_histogram' in row:
             try:
                 raga_histogram = np.array([float(x) for x in row['pitch_histogram'].split(',')])
                 histogram_score = np.corrcoef(pitch_histogram, raga_histogram)[0, 1] * 100
-                final_score += 0.15 * histogram_score
+                final_score = 0.5 * final_score + 0.5 * histogram_score
                 score_details["histogram_match"] = histogram_score
             except (ValueError, KeyError, IndexError):
                 pass
         
-        # Vadi-samvadi matching
+        # Add vadi-samvadi matching if available
         if vadi_samvadi is not None and 'vadi' in row and 'samvadi' in row:
             try:
                 vadi_match = 100 if vadi_samvadi[0] == row['vadi'] else 0
                 samvadi_match = 100 if vadi_samvadi[1] == row['samvadi'] else 0
                 vadi_score = 0.7 * vadi_match + 0.3 * samvadi_match
-                final_score += 0.05 * vadi_score
+                final_score = 0.7 * final_score + 0.3 * vadi_score
                 score_details["vadi_samvadi_match"] = vadi_score
             except (KeyError, IndexError):
                 pass
         
-        # Gamaka features matching
+        # Add gamaka features matching if available
         if gamaka_features is not None and 'gamaka_features' in row:
             try:
                 raga_gamaka = np.array([float(x) for x in row['gamaka_features'].split(',')])
@@ -623,24 +550,21 @@ def find_best_matching_raga(pitch_notes, pitch_histogram=None, vadi_samvadi=None
             best_raga = raga_name
             best_details = score_details
 
+    # Sort ragas by matching score for the top 3
     top_ragas = sorted(matching_scores.items(), key=lambda x: x[1], reverse=True)[:3]
     
     return best_raga, best_score, {"top_matches": top_ragas, "details": best_details}
 
-# Hybrid prediction
-def hybrid_predict(cnn_probs, rule_scores):
-    combined_scores = 0.7 * cnn_probs + 0.3 * rule_scores
-    return np.argmax(combined_scores)
-
-# Contextual filtering
-def filter_ragas_by_vocal_range(raga_df, vocal_range):
-    min_hz = vocal_range.get("min_hz", 100)
-    max_hz = vocal_range.get("max_hz", 1000)
-    return raga_df[raga_df["swara_set"].apply(lambda x: is_within_vocal_range(x, min_hz, max_hz))]
-
-def is_within_vocal_range(swara_set, min_hz, max_hz):
-    # Placeholder: Convert swara_set to frequencies and check range
-    return True  # Implement based on swara-to-frequency mapping
+# Feature extraction function - UPDATED to match the notebook implementation exactly
+def features_extractor(file):
+    try:
+        audio, sample_rate = librosa.load(file, sr=None, duration=30)  # Limit to 30 seconds
+        mfccs = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
+        mfccs_scaled_features = np.mean(mfccs.T, axis=0)
+        return mfccs_scaled_features
+    except Exception as e:
+        print(f"Error processing {file}: {e}")
+        return None
 
 # NEW: Enhanced pitch to note conversion with better microtone handling
 def improved_pitch_to_swara(pitch_values, sr=22050):
@@ -775,6 +699,7 @@ def get_notation_guide():
         }
     }
 
+
 # Detect gamakas (ornamentations) in the audio
 def detect_gamakas(pitch_values, sr=22050, hop_length=512):
     """
@@ -822,6 +747,33 @@ def detect_gamakas(pitch_values, sr=22050, hop_length=512):
     ])
     
     return gamaka_features
+
+# Create pitch histogram
+def create_pitch_histogram(pitch_values, sr=22050, bins=12):
+    """
+    Create a normalized pitch class histogram from pitch values.
+    """
+    if len(pitch_values) == 0 or np.all(pitch_values <= 0):
+        return np.zeros(bins)
+    
+    # Filter out zero or negative values
+    valid_pitch = pitch_values[pitch_values > 0]
+    
+    if len(valid_pitch) == 0:
+        return np.zeros(bins)
+    
+    # Convert frequencies to pitch classes (0-11, C to B)
+    C4_FREQ = 261.63
+    cents = 1200 * np.log2(valid_pitch / C4_FREQ)
+    pitch_classes = (cents / 100) % 12
+    
+    # Create histogram
+    histogram, _ = np.histogram(pitch_classes, bins=bins, range=(0, 12), density=True)
+    
+    # Normalize
+    histogram = histogram / np.sum(histogram)
+    
+    return histogram
 
 # Detect Vadi (dominant) and Samvadi (sub-dominant) notes
 def detect_vadi_samvadi(pitch_values, sr=22050):
@@ -894,7 +846,9 @@ def analyze_segments(y_audio, sr=22050):
     
     for segment, start_time in segments:
         # Get pitch for this segment
-        pitch = get_pitch(segment, sr)
+        pitch = librosa.yin(segment, fmin=librosa.note_to_hz('C1'), 
+                           fmax=librosa.note_to_hz('C8'), 
+                           sr=sr)
         
         # Get notes
         swara_notes = improved_pitch_to_swara(pitch, sr)
@@ -927,17 +881,17 @@ def analyze_segments(y_audio, sr=22050):
     
     return segment_results
 
-# Extract features for CNN model and MATLAB-like analysis
+# Extract features for CNN model and MATLAB-like analysis - UPDATED to match notebook
 def extract_features_from_file(file_path):
-    # Load audio
+    # Load audio - using default parameters to match notebook
     y_audio, sr = librosa.load(file_path, sr=None)
     
     # Extract features for ML model if available
     if model_loaded:
         # Get raw pitch for rule-based matching
-        pitch = get_pitch(y_audio, sr)
+        pitch = librosa.yin(y_audio, fmin=librosa.note_to_hz('C1'), fmax=librosa.note_to_hz('C8'))
         
-        # Extract 2D spectrogram features
+        # Use EXACTLY the same feature extraction as in notebook
         log_mel_spec = features_extractor(file_path)
     else:
         log_mel_spec = None
@@ -1130,14 +1084,13 @@ def analyze_audio_signal(y_audio, sr):
     plt.savefig(norm_periodogram_path)
     plt.close()
     
-    # 10. Plot pitch class histogram
-    pitch = get_pitch(y_audio, sr)
+    # NEW: 10. Plot pitch class histogram
+    pitch = librosa.yin(y_audio, fmin=librosa.note_to_hz('C1'), fmax=librosa.note_to_hz('C8'), sr=sr)
     pitch_histogram = create_pitch_histogram(pitch, sr)
     
     plt.figure(figsize=(10, 6))
-    note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B', 
-                  'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-    plt.bar(note_names[:24], pitch_histogram)
+    note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    plt.bar(note_names, pitch_histogram)
     plt.xlabel('Pitch Class')
     plt.ylabel('Normalized Frequency')
     plt.title('Pitch Class Histogram')
@@ -1146,7 +1099,7 @@ def analyze_audio_signal(y_audio, sr):
     plt.savefig(pitch_hist_path)
     plt.close()
     
-    # 11. Plot pitch contour
+    # NEW: 11. Plot pitch contour
     pitch_times = librosa.times_like(pitch, sr=sr)
     plt.figure(figsize=(10, 6))
     plt.plot(pitch_times, pitch)
@@ -1187,8 +1140,8 @@ def analyze_audio_signal(y_audio, sr):
             "fft_plot": f"/graphs/{fft_file}",
             "psd": f"/graphs/{psd_file}",
             "normalized_periodogram": f"/graphs/{norm_periodogram_file}",
-            "pitch_histogram": f"/graphs/{pitch_hist_file}",
-            "pitch_contour": f"/graphs/{pitch_contour_file}"
+            "pitch_histogram": f"/graphs/{pitch_hist_file}",  # NEW
+            "pitch_contour": f"/graphs/{pitch_contour_file}"  # NEW
         }
     }
     
@@ -1368,9 +1321,9 @@ class PersonalizedRecommendationSystem:
                     break
                 
                 # For advanced users, look for complex gamakas or unique features
-                gamaka = row.get("gamak", "")
+                gamak = row.get("gamak", "")
                 
-                if gamaka and len(gamaka.strip()) > 0:
+                if gamak and len(gamak.strip()) > 0:
                     reason = f"{raga_name} features complex gamakas that will challenge your advanced skills."
                     
                     recommendations.append({
@@ -1636,310 +1589,708 @@ class PersonalizedRecommendationSystem:
                 
                 # Scale features
                 self.scaler.fit(X)
-                                # Scale features
-                self.scaler.fit(X)
                 X_scaled = self.scaler.transform(X)
-
-                # Train the model
+                
+                # Train model
                 self.model.fit(X_scaled, y)
-
-                # Save the updated model and scaler
+                
+                # Save model
                 joblib.dump(self.model, self.model_path)
                 joblib.dump(self.scaler, self.scaler_path)
+                
                 self.model_trained = True
                 return True
-            else:
-                return False
         except Exception as e:
-            logging.error(f"Error updating recommendation model: {e}")
-            return False
-
-# Initialize recommendation system
+            print(f"Error updating recommendation model: {e}")
+        
+        return False
+        
+# Create recommendation system instance
 recommendation_system = PersonalizedRecommendationSystem()
 
-# Flask Routes
-
-@app.route('/')
-def index():
-    """Render the main page"""
-    return render_template('index.html')
-
-@app.route('/register', methods=['POST'])
-def register():
-    """Register a new user"""
-    try:
-        data = request.get_json()
-        username = data.get('username')
-        password = data.get('password')
-
-        if not username or not password:
-            return jsonify({'error': 'Username and password are required'}), 400
-
-        user_dir = get_user_data_path(username)
-        if os.path.exists(os.path.join(user_dir, 'profile.json')):
-            return jsonify({'error': 'Username already exists'}), 400
-
-        # Hash password
-        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+def update_user_progress(username, performance_data, vocal_characteristics):
+    """
+    Update user progress and skill metrics based on performance data
+    
+    Args:
+        username (str): Username
+        performance_data (dict): Performance evaluation data
+        vocal_characteristics (dict): Vocal characteristics data
         
-        # Create user profile
-        profile = {
-            'username': username,
-            'password': hashed_password,
-            'created_at': datetime.now().isoformat(),
-            'practice_sessions': 0,
-            'total_practice_time': 0,
-            'ragas_practiced': [],
-            'skill_level': 'beginner',
-            'vocal_range': {'min_hz': None, 'max_hz': None},
-            'preferred_ragas': [],
-            'achievements': [],
-            'practice_streak': 0,
-            'last_practice': None,
-            'personalization_data': {
-                'pitch_accuracy': 0.0,
-                'rhythm_stability': 0.0,
-                'gamaka_proficiency': 0.0,
-                'breath_control': 0.0
+    Returns:
+        dict: Updated user profile
+    """
+    # Load user profile
+    profile = load_user_profile(username)
+    
+    # Update practice statistics
+    profile["practice_sessions"] += 1
+    
+    # Estimate session duration in minutes
+    session_duration = 5  # Default 5 minutes
+    profile["total_practice_time"] += session_duration
+    
+    # Update last practice time
+    profile["last_practice"] = datetime.now().isoformat()
+    
+    # Update practice streak
+    if profile["last_practice"]:
+        last_practice = datetime.fromisoformat(profile["last_practice"])
+        days_since_last = (datetime.now() - last_practice).days
+        
+        if days_since_last <= 1:  # Same day or consecutive day
+            profile["practice_streak"] += 1
+        else:
+            profile["practice_streak"] = 1
+    else:
+        profile["practice_streak"] = 1
+    
+    # Update vocal range
+    vocal_range = vocal_characteristics.get("vocal_range", {})
+    
+    if vocal_range:
+        min_hz = vocal_range.get("min_hz", None)
+        max_hz = vocal_range.get("max_hz", None)
+        
+        if min_hz and max_hz:
+            # Update min vocal range
+            if profile["vocal_range"]["min"] is None or min_hz < profile["vocal_range"]["min"]:
+                profile["vocal_range"]["min"] = min_hz
+            
+            # Update max vocal range
+            if profile["vocal_range"]["max"] is None or max_hz > profile["vocal_range"]["max"]:
+                profile["vocal_range"]["max"] = max_hz
+    
+    # Update ragas practiced
+    raga = performance_data.get("raga", "")
+    if raga and raga not in profile["ragas_practiced"]:
+        profile["ragas_practiced"].append(raga)
+    
+    # Update skill metrics
+    personalization_data = profile.get("personalization_data", {})
+    
+    # Update pitch accuracy
+    new_pitch_accuracy = (performance_data.get("structure_adherence", {}).get("aaroh", 0) + 
+                         performance_data.get("structure_adherence", {}).get("avroh", 0)) / 2
+    
+    # Update rhythm stability
+    new_rhythm_stability = performance_data.get("rhythm_stability", 0)
+    
+    # Update gamaka proficiency based on gamaka features
+    gamaka_features = performance_data.get("detected_patterns", {}).get("gamaka_features", [])
+    new_gamaka_proficiency = 50.0  # Default
+    if gamaka_features and len(gamaka_features) >= 3:
+        # Simple heuristic for gamaka proficiency
+        new_gamaka_proficiency = min(100, gamaka_features[0] * 10 + gamaka_features[2] * 20)
+    
+    # Update breath control from vocal characteristics
+    new_breath_control = vocal_characteristics.get("breath_control", 0) * 100
+    
+    # Update metrics with exponential moving average (give more weight to recent performances)
+    alpha = 0.3  # Smoothing factor
+    
+    personalization_data["pitch_accuracy"] = alpha * new_pitch_accuracy + (1 - alpha) * personalization_data.get("pitch_accuracy", new_pitch_accuracy)
+    personalization_data["rhythm_stability"] = alpha * new_rhythm_stability + (1 - alpha) * personalization_data.get("rhythm_stability", new_rhythm_stability)
+    personalization_data["gamaka_proficiency"] = alpha * new_gamaka_proficiency + (1 - alpha) * personalization_data.get("gamaka_proficiency", new_gamaka_proficiency)
+    personalization_data["breath_control"] = alpha * new_breath_control + (1 - alpha) * personalization_data.get("breath_control", new_breath_control)
+    
+    # Update profile
+    profile["personalization_data"] = personalization_data
+    
+    # Update skill level based on metrics
+    avg_skill = (personalization_data["pitch_accuracy"] + 
+                personalization_data["rhythm_stability"] + 
+                personalization_data["gamaka_proficiency"] +
+                personalization_data["breath_control"]) / 4
+    
+    if avg_skill > 80:
+        profile["skill_level"] = "advanced"
+    elif avg_skill > 60:
+        profile["skill_level"] = "intermediate"
+    else:
+        profile["skill_level"] = "beginner"
+    
+    # Check for achievements
+    if profile["practice_streak"] >= 7 and "7_day_streak" not in profile["achievements"]:
+        profile["achievements"].append("7_day_streak")
+    
+    if len(profile["ragas_practiced"]) >= 5 and "5_ragas_learned" not in profile["achievements"]:
+        profile["achievements"].append("5_ragas_learned")
+    
+    if profile["total_practice_time"] >= 60 and "1_hour_milestone" not in profile["achievements"]:
+        profile["achievements"].append("1_hour_milestone")
+    
+    # Save updated profile
+    save_user_profile(username, profile)
+    
+    return profile
+
+# User management routes
+@app.route("/register", methods=["POST"])
+def register_user():
+    """Register a new user"""
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+    
+    user_dir = os.path.join(USER_DATA_PATH, username)
+    if os.path.exists(user_dir):
+        return jsonify({"error": "Username already exists"}), 400
+    
+    # Create user directory
+    os.makedirs(user_dir, exist_ok=True)
+    
+    # Hash the password
+    password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+    
+    # Create user profile
+    profile = {
+        "username": username,
+        "password_hash": password_hash,
+        "created_at": datetime.now().isoformat(),
+        "practice_sessions": 0,
+        "total_practice_time": 0,
+        "ragas_practiced": [],
+        "skill_level": "beginner",
+        "vocal_range": {
+            "min": None,
+            "max": None
+        },
+        "preferred_ragas": [],
+        "achievements": [],
+        "practice_streak": 0,
+        "last_practice": None,
+        "personalization_data": {
+            "pitch_accuracy": 0.0,
+            "rhythm_stability": 0.0,
+            "gamaka_proficiency": 0.0,
+            "breath_control": 0.0
+        }
+    }
+    
+    # Save profile
+    save_user_profile(username, profile)
+    
+    # Log user in
+    session["username"] = username
+    
+    return jsonify({"message": "User registered successfully"})
+
+@app.route("/login", methods=["POST"])
+def login_user():
+    """Log in a user"""
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+    
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+    
+    # Check if user exists
+    profile_path = os.path.join(get_user_data_path(username), "profile.json")
+    if not os.path.exists(profile_path):
+        return jsonify({"error": "Invalid username or password"}), 401
+    
+    # Load profile
+    with open(profile_path, "r") as f:
+        profile = json.load(f)
+    
+    # Check password
+    password_hash = profile.get("password_hash")
+    if not password_hash or not bcrypt.check_password_hash(password_hash, password):
+        return jsonify({"error": "Invalid username or password"}), 401
+    
+    # Log user in
+    session["username"] = username
+    
+    # Return basic profile info (excluding password hash)
+    profile_info = {k: v for k, v in profile.items() if k != "password_hash"}
+    return jsonify({"message": "Login successful", "profile": profile_info})
+
+@app.route("/logout", methods=["POST"])
+def logout_user():
+    """Log out a user"""
+    session.pop("username", None)
+    return jsonify({"message": "Logout successful"})
+
+@app.route("/profile", methods=["GET"])
+def get_user_profile():
+    """Get the current user's profile"""
+    username = session.get("username")
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    
+    profile = load_user_profile(username)
+    
+    # Remove sensitive information
+    if "password_hash" in profile:
+        del profile["password_hash"]
+    
+    return jsonify(profile)
+
+@app.route("/profile", methods=["PUT"])
+def update_user_profile():
+    """Update the current user's profile"""
+    username = session.get("username")
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    
+    data = request.get_json()
+    profile = load_user_profile(username)
+    
+    # Update allowed fields
+    allowed_fields = [
+        "preferred_ragas"
+    ]
+    
+    for field in allowed_fields:
+        if field in data:
+            profile[field] = data[field]
+    
+    # Save profile
+    save_user_profile(username, profile)
+    
+    return jsonify({"message": "Profile updated successfully", "profile": profile})
+
+# Performance analysis with personalization
+@app.route("/analyze_performance", methods=["POST"])
+def analyze_performance():
+    """
+    Analyze performance with personalized feedback based on user profile
+    Requires user login
+    """
+    username = session.get("username")
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+        
+    file = request.files['file']
+    raga_name = request.form.get('raga', '')
+    
+    if not raga_name:
+        return jsonify({"error": "Please specify a raga name"}), 400
+    
+    # Find the raga info
+    raga_info = None
+    for _, row in raga_df.iterrows():
+        if row['name_of_the_raag'].lower() == raga_name.lower():
+            raga_info = row.to_dict()
+            break
+    
+    if raga_info is None:
+        return jsonify({"error": f"Raga '{raga_name}' not found in database"}), 404
+        
+    # Save temporary file
+    temp_path = os.path.join("temp", f"{uuid.uuid4().hex}.wav")
+    file.save(temp_path)
+    
+    try:
+        # Load audio
+        y_audio, sr = librosa.load(temp_path, sr=None)
+        
+        # Transcribe lyrics if present (optional)
+        transcribed_text = None
+        try:
+            transcribed_text = speech_to_text(temp_path)
+        except Exception as e:
+            print(f"Error transcribing speech: {e}")
+        
+        # Analyze vocal characteristics
+        vocal_characteristics = analyze_vocal_characteristics(y_audio, sr)
+        
+        # Evaluate performance
+        performance_results = evaluate_performance(y_audio, sr, raga_info, transcribed_text)
+        
+        # Add raga and timestamp to performance data
+        performance_results["raga"] = raga_name
+        performance_results["timestamp"] = datetime.now().isoformat()
+        
+        # Save performance to user history
+        save_performance_record(username, performance_results)
+        
+        # Update user progress
+        updated_profile = update_user_progress(username, performance_results, vocal_characteristics)
+        
+        # Prepare response
+        response_data = {
+            "performance": performance_results,
+            "vocal_characteristics": vocal_characteristics,
+            "profile_updates": {
+                "skill_level": updated_profile["skill_level"],
+                "practice_streak": updated_profile["practice_streak"],
+                "achievements": updated_profile["achievements"]
             }
         }
-        save_user_profile(username, profile)
-        return jsonify({'message': 'Registration successful'}), 201
-    except Exception as e:
-        logging.error(f"Registration error: {e}")
-        return jsonify({'error': 'Registration failed'}), 500
-
-@app.route('/login', methods=['POST'])
-def login():
-    """User login"""
-    try:
-        data = request.get_json()
-        username = data.get('username')
-        password = data.get('password')
-
-        profile = load_user_profile(username)
-        if not profile or not bcrypt.check_password_hash(profile['password'], password):
-            return jsonify({'error': 'Invalid username or password'}), 401
-
-        session['username'] = username
-        return jsonify({'message': 'Login successful', 'username': username}), 200
-    except Exception as e:
-        logging.error(f"Login error: {e}")
-        return jsonify({'error': 'Login failed'}), 500
-
-@app.route('/logout', methods=['POST'])
-def logout():
-    """User logout"""
-    session.pop('username', None)
-    return jsonify({'message': 'Logged out successfully'}), 200
-
-@app.route('/profile', methods=['GET', 'PUT'])
-def profile():
-    """Get or update user profile"""
-    if 'username' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    username = session['username']
-    profile = load_user_profile(username)
-
-    if request.method == 'GET':
-        # Remove password from response
-        profile_copy = profile.copy()
-        profile_copy.pop('password', None)
-        return jsonify(profile_copy), 200
-
-    elif request.method == 'PUT':
-        try:
-            data = request.get_json()
-            # Update allowed fields
-            for key in ['skill_level', 'vocal_range', 'preferred_ragas']:
-                if key in data:
-                    profile[key] = data[key]
-            save_user_profile(username, profile)
-            return jsonify({'message': 'Profile updated successfully'}), 200
-        except Exception as e:
-            logging.error(f"Profile update error: {e}")
-            return jsonify({'error': 'Failed to update profile'}), 500
-
-@app.route('/analyze_performance', methods=['POST'])
-def analyze_performance():
-    """Analyze uploaded audio for raga identification and performance evaluation"""
-    if 'username' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    username = session['username']
-    profile = load_user_profile(username)
-
-    if 'file' not in request.files:
-        return jsonify({'error': 'No audio file provided'}), 400
-
-    file = request.files['file']
-    if not file.filename.endswith(('.wav', '.mp3')):
-        return jsonify({'error': 'Invalid file format'}), 400
-
-    try:
-        # Save uploaded file temporarily
-        temp_file = os.path.join('temp', f'{uuid.uuid4().hex}.wav')
-        file.save(temp_file)
-
-        # Extract features
-        log_mel_spec, pitch, y_audio, sr = extract_features_from_file(temp_file)
-
-        if log_mel_spec is None or pitch is None:
-            return jsonify({'error': 'Failed to process audio'}), 500
-
-        # CNN prediction
-        if model_loaded:
-            # Segment-based analysis
-            segment_features = segment_features(temp_file)
-            if segment_features is not None:
-                cnn_preds = model.predict(segment_features)
-                cnn_probs = np.mean(cnn_preds, axis=0)
-                cnn_raga_idx = np.argmax(cnn_probs)
-                cnn_raga = label_encoder.classes_[cnn_raga_idx]
-                cnn_confidence = float(cnn_probs[cnn_raga_idx])
-            else:
-                cnn_raga = 'Unknown'
-                cnn_confidence = 0.0
-        else:
-            cnn_raga = 'Unknown'
-            cnn_confidence = 0.0
-
-        # Rule-based matching
-        swara_notes = improved_pitch_to_swara(pitch, sr)
-        pitch_histogram = create_pitch_histogram(pitch, sr)
-        vadi_samvadi = detect_vadi_samvadi(pitch, sr)
-        gamaka_features = detect_gamakas(pitch, sr)
-        rule_raga, rule_score, rule_details = find_best_matching_raga(
-            swara_notes, pitch_histogram, vadi_samvadi, gamaka_features
-        )
-
-        # Hybrid prediction
-        if model_loaded and cnn_raga != 'Unknown' and rule_raga != 'Unknown':
-            # Convert rule scores to probabilities
-            rule_probs = np.zeros(len(label_encoder.classes_))
-            for raga_name, score in rule_details['top_matches']:
-                if raga_name in label_encoder.classes_:
-                    idx = np.where(label_encoder.classes_ == raga_name)[0][0]
-                    rule_probs[idx] = score / 100
-            final_raga_idx = hybrid_predict(cnn_probs, rule_probs)
-            final_raga = label_encoder.classes_[final_raga_idx]
-            final_confidence = float(cnn_probs[final_raga_idx] * 0.7 + rule_probs[final_raga_idx] * 0.3)
-        else:
-            final_raga = rule_raga if rule_raga != 'Unknown' else cnn_raga
-            final_confidence = rule_score / 100 if rule_raga != 'Unknown' else cnn_confidence
-
-        # Contextual filtering
-        vocal_range = profile.get('vocal_range', {})
-        filtered_ragas = filter_ragas_by_vocal_range(raga_df, vocal_range) if vocal_range.get('min_hz') else raga_df
-        current_hour = datetime.now().hour
-        time_filtered_ragas = filtered_ragas[filtered_ragas['time'].apply(
-            lambda x: any(int(t.split(':')[0]) <= current_hour < int(t.split(':')[0]) + 3 for t in x.split('-'))
-        )] if 'time' in filtered_ragas.columns else filtered_ragas
-
-        # Check if predicted raga is in filtered list
-        if final_raga not in time_filtered_ragas['name_of_the_raag'].values:
-            final_raga = time_filtered_ragas.iloc[0]['name_of_the_raag'] if not time_filtered_ragas.empty else final_raga
-            final_confidence *= 0.9  # Slight penalty for context mismatch
-
-        # Get raga info for evaluation
-        raga_info = raga_df[raga_df['name_of_the_raag'] == final_raga].iloc[0].to_dict() if final_raga in raga_df['name_of_the_raag'].values else {}
-
-        # Transcribe audio for lyrics analysis
-        transcribed_text = speech_to_text(temp_file)
-
-        # Evaluate performance
-        evaluation = evaluate_performance(y_audio, sr, raga_info, transcribed_text)
-
-        # Analyze vocal characteristics
-        vocal_analysis = analyze_vocal_characteristics(y_audio, sr)
-
-        # Update user profile
-        profile['practice_sessions'] += 1
-        profile['total_practice_time'] += librosa.get_duration(y=y_audio, sr=sr) / 60
-        profile['ragas_practiced'].append(final_raga)
-        profile['vocal_range'] = {
-            'min_hz': vocal_analysis['vocal_range']['min_hz'],
-            'max_hz': vocal_analysis['vocal_range']['max_hz']
+        
+        # Add transcription if available
+        if transcribed_text:
+            response_data["transcription"] = transcribed_text
+        
+        # Create audio analysis visualization
+        analysis_results = analyze_audio_signal(y_audio, sr)
+        response_data["analysis"] = analysis_results
+        
+        # Add detailed rhythm analysis
+        rhythm_metrics = analyze_rhythm_stability(y_audio, sr)
+        
+        # Generate rhythm visualization
+        rhythm_viz_path = None  # Visualization not implemented
+        
+        # Generate rhythm exercises
+        rhythm_exercises = generate_rhythm_exercises(rhythm_metrics)
+        
+        # Add to response
+        response_data["rhythm_analysis"] = {
+            "metrics": {k: float(v) if isinstance(v, (int, float, np.number)) else v 
+                      for k, v in rhythm_metrics.items()},
+            "visualization": rhythm_viz_path,
+            "exercises": rhythm_exercises
         }
-        profile['personalization_data'].update({
-            'pitch_accuracy': evaluation['overall_score'],
-            'rhythm_stability': evaluation['rhythm_stability'],
-            'gamaka_proficiency': np.mean(evaluation['detected_patterns']['gamaka_features']),
-            'breath_control': vocal_analysis['breath_control']
-        })
-        profile['last_practice'] = datetime.now().isoformat()
-        save_user_profile(username, profile)
-
-        # Save performance record
-        performance_data = {
-            'raga': final_raga,
-            'confidence': final_confidence,
-            'evaluation': evaluation,
-            'vocal_analysis': vocal_analysis,
-            'transcribed_text': transcribed_text
-        }
-        save_performance_record(username, performance_data)
-
-        # Generate recommendations
-        recommendations = recommendation_system.recommend_ragas(profile, performance_data, raga_df)
-        practice_routine = recommendation_system.recommend_practice_routine(profile, evaluation)
-
-        # Signal analysis for visualization
-        signal_analysis = analyze_audio_signal(y_audio, sr)
-
-        # Clean up
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-
-        return jsonify({
-            'raga': final_raga,
-            'confidence': final_confidence,
-            'cnn_raga': cnn_raga,
-            'cnn_confidence': cnn_confidence,
-            'rule_raga': rule_raga,
-            'rule_score': rule_score,
-            'rule_details': rule_details,
-            'evaluation': evaluation,
-            'vocal_analysis': vocal_analysis,
-            'transcribed_text': transcribed_text,
-            'signal_analysis': signal_analysis,
-            'recommendations': recommendations,
-            'practice_routine': practice_routine
-        }), 200
-
+        
+        os.remove(temp_path)
+        return jsonify(response_data)
+        
     except Exception as e:
-        logging.error(f"Analysis error: {traceback.format_exc()}")
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-        return jsonify({'error': f'Analysis failed: {str(e)}'}), 500
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/graphs/<filename>')
-def serve_graph(filename):
-    """Serve generated graph images"""
-    return send_from_directory('static/graphs', filename)
-
-@app.route('/recommendations', methods=['GET'])
+# Personalized recommendations
+@app.route("/recommendations", methods=["GET"])
 def get_recommendations():
-    """Get personalized recommendations"""
-    if 'username' not in session:
-        return jsonify({'error': 'Unauthorized'}), 401
-
-    username = session['username']
+    """
+    Get personalized raga and practice recommendations
+    Requires user login
+    """
+    username = session.get("username")
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    
+    # Load user profile
     profile = load_user_profile(username)
-
-    recommendations = recommendation_system.recommend_ragas(profile, raga_df)
-    practice_routine = recommendation_system.recommend_practice_routine(profile)
-
+    
+    # Check if the user has any performance data
+    performances_path = os.path.join(get_user_data_path(username), "performances.json")
+    latest_performance = None
+    
+    if os.path.exists(performances_path):
+        with open(performances_path, "r") as f:
+            performances = json.load(f)
+            
+        if performances:
+            # Get the latest performance
+            latest_performance = max(performances, key=lambda p: p.get("timestamp", ""))
+    
+    # Get raga recommendations
+    raga_recommendations = recommendation_system.recommend_ragas(
+        profile, latest_performance, raga_df, count=3
+    )
+    
+    # Get practice routine
+    practice_routine = recommendation_system.recommend_practice_routine(
+        profile, latest_performance
+    )
+    
     return jsonify({
-        'recommendations': recommendations,
-        'practice_routine': practice_routine
-    }), 200
+        "raga_recommendations": raga_recommendations,
+        "practice_routine": practice_routine
+    })
 
-@app.route('/notation_guide', methods=['GET'])
-def notation_guide():
-    """Return Indian classical music notation guide"""
-    return jsonify(get_notation_guide()), 200
+# Update recommendation model (admin function)
+@app.route("/admin/update_recommendation_model", methods=["POST"])
+def update_recommendation_model():
+    """
+    Update the recommendation model with all user data
+    Admin access only (simplified for now)
+    """
+    # Simple admin check - would use proper authentication in production
+    admin_key = request.headers.get("X-Admin-Key")
+    if not admin_key or admin_key != "admin_secret_key":
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    # Collect all user data
+    user_data = {}
+    
+    for username in os.listdir(USER_DATA_PATH):
+        user_dir = os.path.join(USER_DATA_PATH, username)
+        if not os.path.isdir(user_dir):
+            continue
+        
+        # Load user profile
+        profile_path = os.path.join(user_dir, "profile.json")
+        if not os.path.exists(profile_path):
+            continue
+            
+        with open(profile_path, "r") as f:
+            profile = json.load(f)
+        
+        # Load performances
+        performances_path = os.path.join(user_dir, "performances.json")
+        performances = []
+        
+        if os.path.exists(performances_path):
+            with open(performances_path, "r") as f:
+                performances = json.load(f)
+        
+        # Add to user data
+        user_data[username] = {
+            "profile": profile,
+            "performances": performances
+        }
+    print("User data collected for model update:", user_data)  # Debugging line
+    
+    # Update model
+    success = recommendation_system.update_model(user_data, raga_df)
+    
+    if success:
+        return jsonify({"message": "Recommendation model updated successfully"})
+    else:
+        return jsonify({"message": "Not enough data to update model"}), 400
+
+# Progress tracking
+@app.route("/progress", methods=["GET"])
+def get_user_progress():
+    """
+    Get user progress metrics and history
+    Requires user login
+    """
+    username = session.get("username")
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    
+    # Load user profile
+    profile = load_user_profile(username)
+    
+    # Load performances
+    performances_path = os.path.join(get_user_data_path(username), "performances.json")
+    performances = []
+    
+    if os.path.exists(performances_path):
+        with open(performances_path, "r") as f:
+            performances = json.load(f)
+    
+    # Calculate progress metrics
+    metrics = {
+        "sessions_completed": profile["practice_sessions"],
+        "total_practice_time": profile["total_practice_time"],
+        "current_streak": profile["practice_streak"],
+        "ragas_learned": len(profile["ragas_practiced"]),
+        "skill_metrics": profile["personalization_data"],
+        "skill_level": profile["skill_level"],
+        "achievements": profile["achievements"]
+    }
+    
+    # Calculate improvement over time
+    if len(performances) >= 2:
+        first_perf = performances[0]
+        last_perf = performances[-1]
+        
+        improvement = {
+            "overall_score": last_perf.get("overall_score", 0) - first_perf.get("overall_score", 0),
+            "days_practicing": (datetime.fromisoformat(last_perf.get("timestamp", datetime.now().isoformat())) - 
+                             datetime.fromisoformat(first_perf.get("timestamp", datetime.now().isoformat()))).days
+        }
+        
+        metrics["improvement"] = improvement
+    
+    # Get performance history for charts
+    history = []
+    for perf in performances:
+        history.append({
+            "timestamp": perf.get("timestamp"),
+            "raga": perf.get("raga", ""),
+            "overall_score": perf.get("overall_score", 0),
+            "aaroh_adherence": perf.get("structure_adherence", {}).get("aaroh", 0),
+            "avroh_adherence": perf.get("structure_adherence", {}).get("avroh", 0),
+            "pakad_adherence": perf.get("structure_adherence", {}).get("pakad", 0),
+            "rhythm_stability": perf.get("rhythm_stability", 0)
+        })
+    print("Progress metrics calculated:", metrics)  # Debugging line
+    
+    return jsonify({
+        "metrics": metrics,
+        "history": history
+    })
+
+# Enhanced rhythm stability analysis
+@app.route("/analyze_rhythm", methods=["POST"])
+def analyze_rhythm():
+    """
+    Analyze the rhythm stability of a performance
+    """
+    username = session.get("username")
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+        
+    file = request.files['file']
+    
+    # Save temporary file
+    temp_path = os.path.join("temp", f"{uuid.uuid4().hex}.wav")
+    file.save(temp_path)
+    
+    try:
+        # Load audio
+        y_audio, sr = librosa.load(temp_path, sr=None)
+        
+        # Analyze rhythm stability
+        metrics = analyze_rhythm_stability(y_audio, sr)
+        
+        os.remove(temp_path)
+        return jsonify(metrics)
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+def analyze_rhythm_stability(audio_data, sr):
+    """
+    Perform comprehensive rhythm stability analysis
+    Returns multiple metrics for rhythm quality assessment
+    """
+    metrics = {}
+    
+    # 1. Basic onset-based stability (existing approach, enhanced)
+    try:
+        # Detect onsets with improved parameters
+        onset_env = librosa.onset.onset_strength(y=audio_data, sr=sr, hop_length=512)
+        onsets = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, 
+                                           backtrack=True, units='time')
+        
+        if len(onsets) > 1:
+            # Calculate inter-onset intervals
+            iois = np.diff(onsets)
+            
+            # Basic stability metric (normalized IOI variance)
+            metrics['basic_stability'] = 100.0 - min(100.0, (np.std(iois) / np.mean(iois)) * 100.0)
+            
+            # IOI consistency groups - detect how many distinct IOI clusters exist
+            # (fewer clusters = more consistent rhythm)
+            if len(iois) > 3:
+                from sklearn.cluster import KMeans
+                num_clusters = min(3, len(iois) - 1)
+                kmeans = KMeans(n_clusters=num_clusters).fit(iois.reshape(-1, 1))
+                cluster_sizes = np.bincount(kmeans.labels_)
+                dominant_rhythm_ratio = np.max(cluster_sizes) / len(iois)
+                metrics['rhythm_consistency'] = dominant_rhythm_ratio * 100
+            else:
+                metrics['rhythm_consistency'] = metrics['basic_stability']
+    except Exception as e:
+        print(f"Error in onset detection: {e}")
+        metrics['basic_stability'] = 0.0
+        metrics['rhythm_consistency'] = 0.0
+    
+    # 2. Tempo analysis
+    try:
+        # Get tempo and beat frames
+        tempo, beat_frames = librosa.beat.beat_track(y=audio_data, sr=sr)
+        
+        if len(beat_frames) > 1:
+            # Convert beat frames to time
+            beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+            
+            # Calculate beat regularity
+            beat_intervals = np.diff(beat_times)
+            tempo_stability = 100.0 - min(100.0, (np.std(beat_intervals) / np.mean(beat_intervals)) * 100.0)
+            metrics['tempo_stability'] = tempo_stability
+            metrics['detected_tempo'] = float(tempo)
+            
+            # Calculate tempo drift over time
+            if len(beat_intervals) > 4:
+                # Use linear regression to check if tempo is speeding up or slowing down
+                from scipy.stats import linregress
+                x = np.arange(len(beat_intervals))
+                slope, _, r_value, _, _ = linregress(x, beat_intervals)
+                
+                # Normalized slope (-1 to 1 range, where 0 is no drift)
+                norm_slope = np.tanh(slope * 10)
+                drift_direction = "steady"
+                if norm_slope > 0.1:
+                    drift_direction = "slowing"
+                elif norm_slope < -0.1:
+                    drift_direction = "rushing"
+                
+                metrics['tempo_drift'] = norm_slope
+                metrics['drift_direction'] = drift_direction
+                metrics['drift_severity'] = abs(norm_slope) * 100
+    except Exception as e:
+        print(f"Error in tempo analysis: {e}")
+        metrics['tempo_stability'] = 0.0
+        metrics['detected_tempo'] = 0.0
+        metrics['tempo_drift'] = 0.0
+        metrics['drift_direction'] = "unknown"
+        metrics['drift_severity'] = 0.0
+    
+    # 3. Calculate overall rhythm score from component metrics
+    component_scores = [
+        metrics.get('basic_stability', 0),
+        metrics.get('rhythm_consistency', 0),
+        metrics.get('tempo_stability', 0),
+        100 - metrics.get('drift_severity', 0)
+    ]
+    metrics['overall_rhythm_score'] = sum(score for score in component_scores if score > 0) / max(1, sum(1 for score in component_scores if score > 0))
+    
+    return metrics
+
+def generate_rhythm_exercises(rhythm_metrics):
+    """Generate tailored rhythm exercises based on detected rhythm issues"""
+    exercises = []
+    
+    overall_score = rhythm_metrics.get('overall_rhythm_score', 0)
+    drift_direction = rhythm_metrics.get('drift_direction', '')
+    tempo_stability = rhythm_metrics.get('tempo_stability', 0)
+    
+    # Basic metronome practice
+    exercises.append({
+        "name": "Basic Metronome Practice",
+        "duration": 10,
+        "description": "Practice singing Sa with a metronome at 60 BPM. Gradually increase tempo as you improve.",
+        "importance": "high"
+    })
+    
+    # Add specific exercises based on issues
+    if drift_direction == "rushing":
+        exercises.append({
+            "name": "Slow-motion Practice",
+            "duration": 8,
+            "description": "Practice at half your normal tempo, focusing on maintaining steadiness. Record yourself to check if you still rush.",
+            "importance": "high"
+        })
+    
+    elif drift_direction == "slowing":
+        exercises.append({
+            "name": "Stamina Building",
+            "duration": 5,
+            "description": "Practice holding notes for longer durations to build vocal stamina, which helps prevent slowing down.",
+            "importance": "medium"
+        })
+    
+    if tempo_stability < 60:
+        exercises.append({
+            "name": "Subdivision Practice",
+            "duration": 8,
+            "description": "Practice counting subdivisions (1-&-2-&-3-&-4-&) while performing to improve internal timing.",
+            "importance": "high"
+        })
+    
+    # Add tabla pattern practice for everyone
+    exercises.append({
+        "name": "Tabla Pattern Recognition",
+        "duration": 5,
+        "description": "Listen to and try to replicate common tabla patterns. Start with basic Teentaal patterns.",
+        "importance": "medium"
+    })
+    
+    return exercises
 
 # Run the app
 if __name__ == '__main__':

@@ -124,6 +124,45 @@ def save_performance_record(username, performance_data):
     
     return len(performances)  # Return total number of performances
 
+def hz_to_swara(frequency):
+    """
+    Convert frequency in Hz to Indian classical music notation (swara)
+    with appropriate octave information
+    """
+    if frequency <= 0:
+        return "?"
+    
+    # Get the Western note first using librosa
+    western_note = librosa.hz_to_note(frequency)
+    
+    # Parse the note and octave
+    # Western note format is like 'C4' where C is the note and 4 is the octave
+    note = western_note[:-1]  # Note part (like C, C#)
+    octave = int(western_note[-1])  # Octave number
+    
+    # Convert to swara using the existing mapping
+    if note in SWARA_MAPPING:
+        swara = SWARA_MAPPING[note]
+        
+        # Add octave notation:
+        # Middle octave (4) uses no symbol
+        # Lower octave (3) uses a dot below, represented here as a comma prefix
+        # Upper octave (5) uses a dot above, represented here as an apostrophe
+        # For simplicity in display, using ',S' for lower octave and 'S'' for upper octave
+        
+        if octave < 4:
+            # Lower octave
+            return f",{swara}"
+        elif octave > 4:
+            # Upper octave
+            return f"{swara}'"
+        else:
+            # Middle octave
+            return swara
+    else:
+        return "?"
+
+# Use this function in analyze_vocal_characteristics:
 def analyze_vocal_characteristics(audio_data, sr):
     """
     Analyze vocal characteristics including range, timbre, and stability
@@ -150,10 +189,15 @@ def analyze_vocal_characteristics(audio_data, sr):
     max_pitch = np.max(valid_pitch)
     mean_pitch = np.mean(valid_pitch)
     
-    # Convert to note names for better readability
-    min_note = librosa.hz_to_note(min_pitch)
-    max_note = librosa.hz_to_note(max_pitch)
-    mean_note = librosa.hz_to_note(mean_pitch)
+    # Get Western note names (internally needed for conversion)
+    min_note_western = librosa.hz_to_note(min_pitch)
+    max_note_western = librosa.hz_to_note(max_pitch)
+    mean_note_western = librosa.hz_to_note(mean_pitch)
+    
+    # Convert to Indian classical swaras
+    min_note_swara = hz_to_swara(min_pitch)
+    max_note_swara = hz_to_swara(max_pitch)
+    mean_note_swara = hz_to_swara(mean_pitch)
     
     # Calculate spectral characteristics for timbre
     spectral_centroid = np.mean(librosa.feature.spectral_centroid(y=audio_data, sr=sr)[0])
@@ -167,7 +211,9 @@ def analyze_vocal_characteristics(audio_data, sr):
     
     # Roughness can be estimated from spectral contrast
     if len(spectral_contrast_full) > 1:
-        roughness = np.mean(np.abs(np.diff(spectral_contrast_full)))
+        raw_roughness = np.mean(np.abs(np.diff(spectral_contrast_full)))
+        # Normalize to 0-1 range with a reasonable maximum value
+        roughness = min(1.0, raw_roughness / 5.0)  # Using 5.0 as a normalization factor
     else:
         roughness = 0.0
     
@@ -198,9 +244,16 @@ def analyze_vocal_characteristics(audio_data, sr):
             "min_hz": float(min_pitch),
             "max_hz": float(max_pitch),
             "mean_hz": float(mean_pitch),
-            "min_note": min_note,
-            "max_note": max_note,
-            "mean_note": mean_note
+            "min_note": min_note_swara,    # Changed from min_note_western
+            "max_note": max_note_swara,    # Changed from max_note_western
+            "mean_note": mean_note_swara,  # Changed from mean_note_western
+            # Keep these fields to maintain API compatibility, but use swara values
+            "min_note_western": min_note_swara,  
+            "max_note_western": max_note_swara,
+            "mean_note_western": mean_note_swara,
+            "min_swara": min_note_swara,
+            "max_swara": max_note_swara,
+            "mean_swara": mean_note_swara
         },
         "timbre": {
             "brightness": float(brightness),
@@ -986,7 +1039,7 @@ def analyze_audio_signal(y_audio, sr):
     plt.savefig(autocorr_path)
     plt.close()
     
-    # 7. Plot FFT of Speech Signal - NEW
+    # 7. FFT of Speech Signal - NEW
     plt.figure(figsize=(10, 6))
     # Compute FFT and get only positive frequencies
     NFFT = 2**np.ceil(np.log2(len(y_audio))).astype(int)
@@ -1393,7 +1446,7 @@ class PersonalizedRecommendationSystem:
         })
         
         # Add exercises based on weak areas
-        exercise_time_remaining = routine["daily_practice_time"] - 5  # Subtract warm-up time
+        exercise_time_remaining = routine["daily_practice_time"] - 5 # Subtract warm-up time
         
         if "pitch_accuracy" in weak_areas:
             minutes = min(10, exercise_time_remaining)
@@ -1429,8 +1482,9 @@ class PersonalizedRecommendationSystem:
             })
         
         if "breath_control" in weak_areas:
-            minutes = min(5, exercise_time_remaining)
-            exercise_time_remaining -= minutes
+            # Ensure at least 2 minutes for breath control
+            minutes = max(2, min(5, exercise_time_remaining))
+            exercise_time_remaining = max(0, exercise_time_remaining - minutes)
             
             routine["exercises"].append({
                 "name": "Breath control exercises",
@@ -1445,8 +1499,9 @@ class PersonalizedRecommendationSystem:
             
             # Check for issues with pakad
             if structure_adherence.get("pakad", 100) < 70:
-                minutes = min(8, exercise_time_remaining)
-                exercise_time_remaining -= minutes
+                # Ensure at least 3 minutes for pakad practice
+                minutes = max(3, min(8, exercise_time_remaining))
+                exercise_time_remaining = max(0, exercise_time_remaining - minutes)
                 
                 routine["exercises"].append({
                     "name": "Pakad practice",
@@ -1457,8 +1512,9 @@ class PersonalizedRecommendationSystem:
             
             # Check for issues with aaroh/avroh
             if (structure_adherence.get("aaroh", 100) + structure_adherence.get("avroh", 100)) / 2 < 70:
-                minutes = min(8, exercise_time_remaining)
-                exercise_time_remaining -= minutes
+                # Ensure at least 3 minutes for aaroh-avroh practice
+                minutes = max(3, min(8, exercise_time_remaining))
+                exercise_time_remaining = max(0, exercise_time_remaining - minutes)
                 
                 routine["exercises"].append({
                     "name": "Aaroh-Avroh practice",

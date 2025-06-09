@@ -65,7 +65,7 @@ Kedar,S M P D N S'; - S' N D P ; M P D P ; m m R S,S m ; m P; M P D P m ; S R S 
 Khamaj,"S G m P D N S'; - S' n D P m G R G S ,N S G m P",G m P D; G m G; P S' N S'; n D p; m P m G; R S,Gandhar - Nishad,9PM to 12AM,S-R-G-m-P-D-n-S,S G~ M P D~ N S | S N D P~ M G~ R S,Shringar
 Khambavati,"S R m P D S'; - S' n D P D ; m P ; G m S ; R ,n ,D S","P d S' ; S' N S' R' g' R' S' N d P ; d P m P ; P m g R ; g m ; g R S ,N ,d ,N R S",Gandhar - Dhaivat,9PM to 12AM,S-R-G-m-P-D-n-S,S G~ M~ D N~ S | S N D~ P M G~ R S,Hasya
 Kirwani,S R g m P d N S'; - S' N d P m g R S,"P d S' ; S' N S' R' g' R' S' N d P ; d P m P ; P m g R ; g m ; g R S ,N ,d ,N R S",Pancham - Shadj,9PM to 12AM,S-R-g-m-P-d-N-S,S R G~ M D~ n S | S n D~ M G~ R S,Karuna
-Komal Rishabh Asawari,"S r m P d S'; - S' r' n d m P d m g r g r ,n ,d r S",m P d S' ; r' n d m g r ; g r S,Dhaivat - Rishabh,9AM to 12PM,no,S r G~ M P~ d n S | S n d P~ M G~ r S,Karuna
+Komal Rishabh Asawari,"S r m P d S'; - S' r' n d m P d m g r g r ,n ,d r S",m P d S' ; r' n d m g r ; g r S,Dhaivat - Rishabh,9AM to 12PM,S-r-g-m-P-d-n-S',S r G~ M P~ d n S | S n d P~ M G~ r S,Karuna
 Lalit,",N r G M d N S'; - S' N d; M d M m; G M G r S",",N r G m M m G r S ; G M d N d M m; r' N d M m; G m M m; G; M G r S",Shuddha Madhyam - Shadj,3AM to 6AM,S-r-G-mM-d-N-S,S R G~ M~ M P~ N S | S N~ D~ P M~ G R S,Shanta
 Lanka Dahan Sarang,"S R m P N S'; - S' n D P ; m P D P ; g R g R S ,N S","m P S' ; n P ; m P ; R g R S ; ,n ,P ,m ,P ,N S",Shadj - Madhyam,9AM to 12PM,S-R-g-m-P-D-nN-S,S R~ G M P~ N~ S | S N~ D P~ M G~ R S,Raudra
 Madhukauns,S g M P n S' - S' n P M g S,S g M ; P M g M P ; M P n S' ; S' n P M ; g M g S,Pancham - Shadj,9PM to 12AM,S-g-M-P-n-S,S G~ M~ D~ N S | S N~ D~ M G~ R S,Adbhuta
@@ -77,7 +77,7 @@ Malkauns,S g m d n S'; - S' n d m g S,",d ,n S g m; g m n d m; d n S'; g’ S’ n d
 Mand,S R G m P D N P D S'; - S' N D P m G R G S,G m P D S' N D; D P m; m P G R G S,Shadj - Pancham,9PM to 12AM,S-R-G-m-P-D-N-S,S G~ M P~ D N~ S | S N~ D P M~ G R S,Shringar
 Maru Bihag,S G M P N S'; - S' N D P M G M G R S,"M G ; M G R S ; S ,N S ; m G P ; M G M G R S",Pancham - Shadj,9PM to 12AM,S-R-G-mM-P-D-N-S,S G~ M~ P~ D N S | S N D~ P M~ G~ R S,Shringar
 Marwa,"S ,D ,N r G M D N S'; - S' N D M G r S ; ,N ,D S ,N r S ","S ; ,N ,D S ,N r ; r G M D ; D M G r ; ,N ,D r S",Rishabh - Dhaivat,3PM to 6PM,S-r-G-M-D-N-S,S r~ G~ M~ D~ N S | S N~ D~ M~ G r S,Bhayanak
-Megh Malhar,"S (m)R m P ,n S'; - S' n P m R S; R ,n S",",n S R P m R ; m P m R ; m P ; P m n P m R ; R R P m R R S ,n S",Madhyam - Shadj,Anytime in Rainy Season,S-R-m-P-n-S,S R M~ P~ N~ S | S N~ D~ P M R~ S,Adbhuta
+Megh Malhar,"S (m)R m P ,n S'; - S' n P m R S; R ,n S",",n S R P m R ; m P m R ; m P ; P m n P m R ; R R P m R R S ,n S",Madhyam - Shadj,3 PM to 9 PM,S-R-m-P-n-S,S R M~ P~ N~ S | S N~ D~ P M R~ S,Adbhuta
 Mohankauns,S G m d n S' - S' n d m g S,"S G m g S ; ,n ,d ; ,n S ; S m G ; m d n d m G ; m G g S",Madhyam - Shadj,9PM to 12AM,S-gG-m-d-n-S,S G~ M~ D~ N~ S | S N~ D~ M~ G~ R S,Karuna
 Multani,",N S g M P N S'; - S' N d P M g r S",",N S ; M g ; M g P ; M g M g r S ",Pancham - Shadj,12PM to 3PM,S-r-g-M-P-d-N-S,S r~ G M~ D~ N S | S N~ D~ P M~ G r~ S,Karuna
 Nand,S G m D P R S ; G m P N S'; - S D N P ; D M P G ; G m D P R S ,S G m D P R S ; G m P D N ; (D)P ; P D (P) m m P ; G m D P R S ,Shadj - Pancham,9PM to 12AM,S-R-G-mM-P-D-N-S,S G~ M P~ N D~ S | S D~ N P M G~ R S,Shringar
@@ -92,7 +92,7 @@ Puriya Dhanashree,",N r S ; ,N r G M P ; M d N S' - S' N d P M G M r G r S",",N 
 Puriya Kalyan,S r G M P D N S' - S' N D P M G r G r S,",N r G M P M r G r S; M D P; M D N S'",Shadj - Pancham,3PM to 6PM,S-r-G-M-P-D-N-S,N~ R~ G~ M D~ N S | S N~ D P~ M G~ R S,Shanta
 Poorvi,S r G M P d N S' - S' N d P ; M G m G r S,S r G ; M G m G ; M d P ; N d P ; G M P ; M G m G r S,Gandhar - Nishad,3PM to 6PM,S-r-G-mM-P-d-N-S,S r~ G~ M~ D~ N S | S N~ D~ M~ G~ r~ S,Raudra
 Ragashree,S G m D n S' - S' n D m G m R S,",n ,D ,n S ; G m R S ; G m D n D m ; G m R S",Gandhar - Nishad,9PM to 12AM,S-R-G-m-D-n-S,S R~ G~ M P~ D~ N S | S N~ D~ P~ M G~ R S,Shringar
-Ramdasi Malhar,",N S R G m ; P G m , R P ; m P D N S' - S' n D n P ; D P m G m ; P g g m R S",S R G m ; m R P ; P G m ; P g g m R S,Madhyam - Shadj,Anytime in Rainy season.,S-R-gG-m-P-D-nN-S,S R M~ P~ N S | S N~ D~ P~ M~ G R~ S,Adbhuta
+Ramdasi Malhar,",N S R G m ; P G m , R P ; m P D N S' - S' n D n P ; D P m G m ; P g g m R S",S R G m ; m R P ; P G m ; P g g m R S,Madhyam - Shadj,9 PM to 12 AM,S-R-gG-m-P-D-nN-S,S R M~ P~ N S | S N~ D~ P~ M~ G R~ S,Adbhuta
 Ramkali,S r G m P d N S' - S' N d P ; M P d n d P ; M P G m r S,M P d n d P ; M P G m r S,Pancham - Shadj,6AM to 9AM,S-r-G-mM-P-d-nN-S,S r~ G~ M P D~ N S | S N~ D~ P M~ G~ r S,Karuna
 Saalag Varali,S r g P D n S' - S' n D P g r S,g P D n D P ; D n D S' ; S' n D P ; D n D P ; r g r S ,Pancham - Shadj,9AM to 12PM,S-r-g-P-D-n-S,S G~ M~ D~ N S | S N~ D~ M~ G~ R S,Vibhatsaya
 Sarang (Brindavani Sarang),"S R m P N S' - S' n P m R S ,N S","R m ; P R ; m R ,N S ; m P n P m R ,N S",Rishabh - Pancham,9AM to 12PM,S-R-m-P-nN-S,S R M~ P N~ S | S N~ D~ P~ M~ R~ S,Hasya
@@ -109,10 +109,10 @@ Shyam Kalyan,",N S R M P N S'; - S' N D P M P D P G m P G m R S ,N S","S R ,N S 
 Sindhura,S R m P D S'; - S' n D P m g R m g R S,R m P D ; n D P S' ; R' g' R' S' ; n D P m g R ; m g R S,Shadj - Pancham,3PM to 6PM,S-R-g-m-P-D-nN-S,S R~ G M~ P D~ N S | S N~ D~ P~ M G~ R~ S,Karuna
 Sohani,S G M D N S'; - S' N D N D M G r S,M D N S' r' S' ; N D N D ; S' r' S' r' N S' N D G M G,Dhaivat - Gandhar,3AM to 6AM,S-r-G-M-D-N-S,S R~ G~ M D~ N S | S N~ D~ M G~ R~ S,Shringar
 Suha Sughrai,",n S ; (m)g (m)g m ; P n P ; P n m P S'; (Suha) or ,n S R m P ; P n P n S' ; (Sughrai) - S' P n P m P (m)g m R S ; (Suha) or S' n P m R S R (m)g m R S ; (Sughrai)",P n m P S' ; n n P m R S R (m)g ; g m R S,Pancham - Shadj,9AM to 12PM,S-R-g-m-P-D-nN-S,S R~ G~ M P~ N S | S N~ D~ P~ M~ G~ R~ S,Hasya
-Sundarkali,S r G P n S'; - S' n P G ; P G r S,"S r G P n P ; G P n ; P G r S ; r S ,n S r S",#NAME?,9AM to 12PM,S-r-G-P-n-S,S R~ g M~ D~ n S | S n~ D~ M~ g~ R~ S,Karuna
+Sundarkali,S r G P n S'; - S' n P G ; P G r S,"S r G P n P ; G P n ; P G r S ; r S ,n S r S",Gandhar - Nishad,9AM to 12PM,S-r-G-P-n-S,S R~ g M~ D~ n S | S n~ D~ M~ g~ R~ S,Karuna
 Sundarkauns,"S g m D n S'; - S' n D m g m g S ,n S",",n ,n ,D ; ,D ,n S ; g m g S ; g m D ; n D ; m D n S'; S' D n D m g S",Madhyam - Shadj,9PM to 12AM,S-g-m-D-n-S,S G~ M~ D~ N~ S | S N~ D~ M~ G~ R~ S,Adbhuta
-Surdasi Malhar,"S R m P N S'; - S' n D P ; m D P ; n D P m R ; ,N S","m R ,N S ; S' ; n D m P n D P ; m R P m D P ; m R ,N S",Madhyam - Shadj,Anytime in Rainy Season,S-R-m-P-D-nN-S,S R~ M~ P~ N S | S N~ D~ P~ M~ R~ S,Karuna
-Tilak Kamod,",P ,N S R G S ; S R m P N S’ - S’ P D m G S R G S ,N ,P ,N S R G S",",P ,N S R G S ; R P m G ; S R G S ,N ; S R m P S’ ; S’ R’ G’ S’ ; S’ P D m G ; S R m G ; S R G S ,N",Shadj - Pancham,9PM to 12AM,no,S R~ G~ M~ P~ D~ N S | S N~ D~ P~ M~ G~ R~ S,Shringar
+Surdasi Malhar,"S R m P N S'; - S' n D P ; m D P ; n D P m R ; ,N S","m R ,N S ; S' ; n D m P n D P ; m R P m D P ; m R ,N S",Madhyam - Shadj,3 PM to 9 PM,S-R-m-P-D-nN-S,S R~ M~ P~ N S | S N~ D~ P~ M~ R~ S,Karuna
+Tilak Kamod,",P ,N S R G S ; S R m P N S’ - S’ P D m G S R G S ,N ,P ,N S R G S",",P ,N S R G S ; R P m G ; S R G S ,N ; S R m P S’ ; S’ R’ G’ S’ ; S’ P D m G ; S R m G ; S R G S ,N",Shadj - Pancham,9PM to 12AM,S-R-G-m-P-D-N-S',S R~ G~ M~ P~ D~ N S | S N~ D~ P~ M~ G~ R~ S,Shringar
 Tilang,S G m P N S'; - S' n P m G S,G m P n P m G ; n P G m G,Gandhar - Nishad,9PM to 12AM,S-G-m-P-nN-S,S G~ M P~ N S | S N~ D~ P M~ G~ S,Hasya
 Tilang Bahar,S R S m ; G m P n P ; m D N S'; - S' n P m g m R S,m P m g ; m ; n P m ; P N S' ; g m P m g m R S,Gandhar (Tilang) or Madhyam (Bahar) - Nishad (Tilang) or Shadj (Bahar),9PM to 12AM,S-R-gG-m-P-D-nN-S,S G~ M~ D N~ S | S N~ D~ M~ G~ R S,Shringar
 Todi,S r g M P d N S' - S' N d P M g r S,",d ; ,N S r g ; M r g ; r S",Dhaivat - Gandhar,9AM to 12PM,S-r-g-M-P-d-N-S,S r~ g~ M~ D~ N S | S N~ D~ M~ g~ r S,Karuna
