@@ -1681,6 +1681,19 @@ def update_user_progress(username, performance_data, vocal_characteristics):
     personalization_data["gamaka_proficiency"] = alpha * new_gamaka_proficiency + (1 - alpha) * personalization_data.get("gamaka_proficiency", new_gamaka_proficiency)
     personalization_data["breath_control"] = alpha * new_breath_control + (1 - alpha) * personalization_data.get("breath_control", new_breath_control)
     
+    # Generate video recommendations based on updated metrics
+    raga = performance_data.get("raga", "Indian Classical")
+    video_recommendations = get_video_recommendations(
+        personalization_data["pitch_accuracy"],
+        personalization_data["rhythm_stability"],
+        personalization_data["gamaka_proficiency"],
+        personalization_data["breath_control"],
+        raga
+    )
+    
+    # Save video recommendations to profile for retrieval in the UI
+    profile["recent_video_recommendations"] = video_recommendations
+    
     # Update profile
     profile["personalization_data"] = personalization_data
     
@@ -1736,7 +1749,7 @@ def register_user():
     # Create user profile
     profile = {
         "username": username,
-                             "password_hash": password_hash,
+                                                         "password_hash": password_hash,
         "created_at": datetime.now().isoformat(),
         "practice_sessions": 0,
         "total_practice_time": 0,
@@ -1904,7 +1917,9 @@ def analyze_performance():
                 "skill_level": updated_profile["skill_level"],
                 "practice_streak": updated_profile["practice_streak"],
                 "achievements": updated_profile["achievements"]
-            }
+            },
+            # Add video recommendations to response
+            "video_recommendations": updated_profile.get("recent_video_recommendations", {})
         }
         
         # Create audio analysis visualization
@@ -2267,6 +2282,225 @@ def generate_rhythm_exercises(rhythm_metrics):
     })
     
     return exercises
+
+# YouTube video recommendations
+@app.route("/video_recommendations", methods=["POST"])
+def video_recommendations():
+    """
+    Get personalized YouTube video recommendations for skill improvement
+    Requires user login
+    """
+    username = session.get("username")
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    
+    data = request.get_json()
+    raga_name = data.get("raga_name", "")
+    
+    # Load user profile
+    profile = load_user_profile(username)
+    
+    # Get latest performance data
+    performances_path = os.path.join(get_user_data_path(username), "performances.json")
+    latest_performance = None
+    
+    if os.path.exists(performances_path):
+        with open(performances_path, "r") as f:
+            performances = json.load(f)
+            
+        if performances:
+            # Get the latest performance
+            latest_performance = max(performances, key=lambda p: p.get("timestamp", ""))
+    
+    # Extract skill metrics
+    pitch_accuracy = profile.get("personalization_data", {}).get("pitch_accuracy", 0)
+    rhythm_stability = profile.get("personalization_data", {}).get("rhythm_stability", 0)
+    gamaka_proficiency = profile.get("personalization_data", {}).get("gamaka_proficiency", 0)
+    breath_control = profile.get("personalization_data", {}).get("breath_control", 0)
+    
+    # Generate recommendations
+    recommendations = get_video_recommendations(pitch_accuracy, rhythm_stability, gamaka_proficiency, breath_control, raga_name)
+    
+    return jsonify(recommendations)
+
+def get_video_recommendations(pitch_accuracy, rhythm_stability, gamaka_proficiency, breath_control, raga_name):
+    """
+    Generate personalized YouTube video recommendations based on user's performance metrics.
+    Recommendations are tiered based on skill level ranges:
+    - 0 to 30: Beginner level (needs significant improvement)
+    - 30 to 60: Intermediate level (moderate improvement needed)
+    - 60 to 100: Advanced level (refinement focused)
+    
+    Args:
+        pitch_accuracy (float): User's pitch accuracy score
+        rhythm_stability (float): User's rhythm stability score
+        gamaka_proficiency (float): User's gamaka proficiency score
+        breath_control (float): User's breath control score
+        raga_name (str): The name of the raga being practiced
+        
+    Returns:
+        dict: Categorized video recommendations with title, URL, description and score
+    """
+    recommendations = {
+        "skill_improvement": [],
+        "raga_examples": [],
+        "technique_tutorials": []
+    }
+    
+    # Add raga-specific examples
+    raga_search_term = raga_name.replace(' ', '+')
+    recommendations["raga_examples"] = [
+        {
+            "title": f"Professional {raga_name} Performance",
+            "url": f"https://www.youtube.com/results?search_query={raga_search_term}+performance+professional",
+            "description": "Watch how professionals perform this raga to understand its nuances"
+        },
+        {
+            "title": f"{raga_name} Tutorial",
+            "url": f"https://www.youtube.com/results?search_query={raga_search_term}+tutorial+beginners",
+            "description": "Learn more about this raga through detailed tutorials"
+        }
+    ]
+    
+    # Pitch accuracy recommendations - tiered by score
+    if pitch_accuracy < 30:
+        recommendations["skill_improvement"].append({
+            "title": "Fundamental Pitch Training for Beginners",
+            "url": "https://www.youtube.com/results?search_query=basic+singing+pitch+training+beginners",
+            "description": "Essential exercises to develop basic pitch recognition and vocal control",
+            "score": pitch_accuracy,
+            "level": "beginner"
+        })
+    elif pitch_accuracy < 60:
+        recommendations["skill_improvement"].append({
+            "title": "Intermediate Pitch Accuracy Exercises",
+            "url": "https://www.youtube.com/results?search_query=indian+classical+vocal+pitch+training+intermediate",
+            "description": "Exercises to refine your pitch control and develop consistency in transitions",
+            "score": pitch_accuracy,
+            "level": "intermediate"
+        })
+    elif pitch_accuracy < 100:
+        recommendations["skill_improvement"].append({
+            "title": "Advanced Pitch Refinement Techniques",
+            "url": "https://www.youtube.com/results?search_query=indian+classical+vocal+advanced+pitch+precision",
+            "description": "Fine-tune your pitch accuracy with advanced exercises for professional-level performance",
+            "score": pitch_accuracy,
+            "level": "advanced"
+        })
+    
+    # Rhythm stability recommendations - tiered by score
+    if rhythm_stability < 30:
+        recommendations["skill_improvement"].append({
+            "title": "Basic Rhythm and Beat Fundamentals",
+            "url": "https://www.youtube.com/results?search_query=basic+rhythm+training+beginners+indian+music",
+            "description": "Learn foundational concepts of rhythm and develop basic sense of timing and beat",
+            "score": rhythm_stability,
+            "level": "beginner"
+        })
+    elif rhythm_stability < 60:
+        recommendations["skill_improvement"].append({
+            "title": "Intermediate Rhythm Training with Taal",
+            "url": "https://www.youtube.com/results?search_query=indian+classical+music+rhythm+training+taal+intermediate",
+            "description": "Develop your rhythmic precision with specific taal patterns and exercises",
+            "score": rhythm_stability,
+            "level": "intermediate"
+        })
+    elif rhythm_stability < 100:
+        recommendations["skill_improvement"].append({
+            "title": "Advanced Rhythmic Variations and Layakari",
+            "url": "https://www.youtube.com/results?search_query=advanced+indian+classical+layakari+complex+rhythms",
+            "description": "Master complex rhythm patterns and develop improvisational rhythmic skills",
+            "score": rhythm_stability,
+            "level": "advanced"
+        })
+    
+    # Gamaka proficiency recommendations - tiered by score
+    if gamaka_proficiency < 30:
+        recommendations["skill_improvement"].append({
+            "title": "Introduction to Basic Gamaka Techniques",
+            "url": "https://www.youtube.com/results?search_query=beginner+gamaka+ornamentations+indian+classical",
+            "description": "Learn the foundational ornamentations essential for Indian classical singing",
+            "score": gamaka_proficiency,
+            "level": "beginner"
+        })
+    elif gamaka_proficiency < 60:
+        recommendations["skill_improvement"].append({
+            "title": "Intermediate Gamaka Techniques for Raga Expression",
+            "url": "https://www.youtube.com/results?search_query=intermediate+gamaka+techniques+indian+classical+music",
+            "description": "Develop more nuanced ornamentations to bring authentic expression to your performances",
+            "score": gamaka_proficiency,
+            "level": "intermediate"
+        })
+    elif gamaka_proficiency < 100:
+        recommendations["skill_improvement"].append({
+            "title": "Advanced Gamaka Mastery for Gharana-Specific Styles",
+            "url": "https://www.youtube.com/results?search_query=advanced+gamaka+master+class+gharana+specific",
+            "description": "Perfect your gamaka techniques with advanced, style-specific ornamentations used by masters",
+            "score": gamaka_proficiency,
+            "level": "advanced"
+        })
+    
+    # Breath control recommendations - tiered by score
+    if breath_control < 30:
+        recommendations["skill_improvement"].append({
+            "title": "Essential Breathing Exercises for Singers",
+            "url": "https://www.youtube.com/results?search_query=breathing+basics+singing+beginners",
+            "description": "Learn fundamental breathing techniques to develop proper breath support for singing",
+            "score": breath_control,
+            "level": "beginner"
+        })
+    elif breath_control < 60:
+        recommendations["skill_improvement"].append({
+            "title": "Intermediate Breath Control for Longer Phrases",
+            "url": "https://www.youtube.com/results?search_query=breath+control+exercises+intermediate+classical+singing",
+            "description": "Develop your breath capacity and control for sustaining longer musical phrases",
+            "score": breath_control,
+            "level": "intermediate"
+        })
+    elif breath_control < 100:
+        recommendations["skill_improvement"].append({
+            "title": "Advanced Breath Management for Complex Passages",
+            "url": "https://www.youtube.com/results?search_query=advanced+breath+control+taans+classical+singing",
+            "description": "Master breath techniques for performing fast taans and complex ornamentations fluidly",
+            "score": breath_control,
+            "level": "advanced"
+        })
+    
+    # Determine overall skill level for general technique tutorials
+    avg_score = (pitch_accuracy + rhythm_stability + gamaka_proficiency + breath_control) / 4
+    
+    if avg_score < 30:
+        level = "beginner"
+        recommendations["technique_tutorials"] = [
+            {
+                "title": "Foundations of Indian Classical Vocal Music",
+                "url": "https://www.youtube.com/results?search_query=beginners+guide+indian+classical+vocal+basics",
+                "description": "Build a strong foundation with these essential lessons for beginners",
+                "level": "beginner"
+            }
+        ]
+    elif avg_score < 60:
+        level = "intermediate"
+        recommendations["technique_tutorials"] = [
+            {
+                "title": "Intermediate Indian Classical Vocal Techniques",
+                "url": "https://www.youtube.com/results?search_query=intermediate+indian+classical+vocal+techniques",
+                "description": "Expand your skills with these intermediate-level technique tutorials",
+                "level": "intermediate"
+            }
+        ]
+    else:
+        level = "advanced"
+        recommendations["technique_tutorials"] = [
+            {
+                "title": "Advanced Classical Vocal Masterclass",
+                "url": "https://www.youtube.com/results?search_query=advanced+indian+classical+vocal+masterclass",
+                "description": "Refine your artistry with techniques from renowned classical vocalists",
+                "level": "advanced"
+            }
+        ]
+    
+    return recommendations
 
 # Run the app
 if __name__ == '__main__':
