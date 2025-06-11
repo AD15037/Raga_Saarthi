@@ -862,7 +862,7 @@ def analyze_segments(y_audio, sr=22050):
             'vadi_samvadi': vadi_samvadi,
             'swaras': ''.join(swara_notes[:20]) + ('...' if len(swara_notes) > 20 else '')
         })
-    
+    print("Segment analysis results:", segment_results)  # Debugging line
     return segment_results
 
 # Extract features for CNN model and MATLAB-like analysis - UPDATED to match notebook
@@ -1115,17 +1115,18 @@ def analyze_audio_signal(y_audio, sr):
             "autocorrelation_time": float(ac_time)
         },
         "graphs": {
-            "waveform": f"/graphs/{waveform_file}",
-            "spectrogram": f"/graphs/{spectrogram_file}",
-            "periodogram": f"/graphs/{periodogram1_file}",
-            "spectrum": f"/graphs/{spectrum_file}",
-            "histogram": f"/graphs/{histogram_file}",
-            "autocorrelation": f"/graphs/{autocorr_file}",
-            "fft_plot": f"/graphs/{fft_file}",
-            "psd": f"/graphs/{psd_file}",
-            "normalized_periodogram": f"/graphs/{norm_periodogram_file}",
-            "pitch_histogram": f"/graphs/{pitch_hist_file}",  # NEW
-            "pitch_contour": f"/graphs/{pitch_contour_file}"  # NEW
+            # Add the /static prefix to all graph paths
+            "waveform": f"/static/graphs/{waveform_file}",
+            "spectrogram": f"/static/graphs/{spectrogram_file}",
+            "periodogram": f"/static/graphs/{periodogram1_file}",
+            "spectrum": f"/static/graphs/{spectrum_file}",
+            "histogram": f"/static/graphs/{histogram_file}",
+            "autocorrelation": f"/static/graphs/{autocorr_file}",
+            "fft_plot": f"/static/graphs/{fft_file}",
+            "psd": f"/static/graphs/{psd_file}",
+            "normalized_periodogram": f"/static/graphs/{norm_periodogram_file}",
+            "pitch_histogram": f"/static/graphs/{pitch_hist_file}",
+            "pitch_contour": f"/static/graphs/{pitch_contour_file}"
         }
     }
     
