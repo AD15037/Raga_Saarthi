@@ -1649,8 +1649,8 @@ def update_user_progress(username, performance_data, vocal_characteristics):
             if profile["vocal_range"]["max"] is None or max_hz > profile["vocal_range"]["max"]:
                 profile["vocal_range"]["max"] = max_hz
     
-    # Update ragas practiced
-    raga = performance_data.get("raga", "")
+    # Update ragas practiced - use predicted_raga if available
+    raga = performance_data.get("predicted_raga", performance_data.get("raga", ""))
     if raga and raga not in profile["ragas_practiced"]:
         profile["ragas_practiced"].append(raga)
     
@@ -1682,8 +1682,8 @@ def update_user_progress(username, performance_data, vocal_characteristics):
     personalization_data["gamaka_proficiency"] = alpha * new_gamaka_proficiency + (1 - alpha) * personalization_data.get("gamaka_proficiency", new_gamaka_proficiency)
     personalization_data["breath_control"] = alpha * new_breath_control + (1 - alpha) * personalization_data.get("breath_control", new_breath_control)
     
-    # Generate video recommendations based on updated metrics
-    raga = performance_data.get("raga", "Indian Classical")
+    # Generate video recommendations based on updated metrics - use predicted_raga if available
+    raga = performance_data.get("predicted_raga", performance_data.get("raga", "Indian Classical"))
     video_recommendations = get_video_recommendations(
         personalization_data["pitch_accuracy"],
         personalization_data["rhythm_stability"],
@@ -1722,6 +1722,8 @@ def update_user_progress(username, performance_data, vocal_characteristics):
         profile["achievements"].append("1_hour_milestone")
     
     # Save updated profile
+   
+      
     save_user_profile(username, profile)
     
     return profile
@@ -1891,18 +1893,95 @@ def analyze_performance():
     file.save(temp_path)
     
     try:
-        # Load audio
-        y_audio, sr = librosa.load(temp_path, sr=None)
+        # Extract features for CNN model prediction
+        features, pitch, y_audio, sr = extract_features_from_file(temp_path)
+        
+        # Use CNN model to predict raga if available
+        cnn_prediction = None
+        if model_loaded and features is not None:
+            # Reshape features for model input
+            features_reshaped = np.array(features).reshape(1, -1)
+            
+            # Predict raga using CNN
+            prediction_probabilities = model.predict(features_reshaped)[0]
+            top_indices = np.argsort(prediction_probabilities)[-3:][::-1]  # Get top 3 predictions
+            
+            # Get raga names and probabilities
+            cnn_prediction = {
+                "predicted_ragas": [
+                    {
+                        "name": label_encoder.inverse_transform([idx])[0],
+                        "confidence": float(prediction_probabilities[idx] * 100)
+                    } for idx in top_indices
+                ],
+                "selected_raga": raga_name,
+                "match_confidence": 0.0  # Will update below if the selected raga is in predictions
+            }
+            
+            # Calculate match confidence between user-selected raga and CNN prediction
+            for pred in cnn_prediction["predicted_ragas"]:
+                if pred["name"].lower() == raga_name.lower():
+                    cnn_prediction["match_confidence"] = pred["confidence"]
+                    break
         
         # Analyze vocal characteristics
         vocal_characteristics = analyze_vocal_characteristics(y_audio, sr)
         
-        # Evaluate performance
-        performance_results = evaluate_performance(y_audio, sr, raga_info)
+        # Evaluate performance against user-selected raga
+        selected_raga_results = evaluate_performance(y_audio, sr, raga_info)
+        
+        # Initialize performance results with selected raga evaluation
+        performance_results = selected_raga_results.copy()
         
         # Add raga and timestamp to performance data
         performance_results["raga"] = raga_name
         performance_results["timestamp"] = datetime.now().isoformat()
+        
+        # Add CNN prediction to performance results
+        predicted_raga_info = None
+        if cnn_prediction:
+            performance_results["cnn_prediction"] = cnn_prediction
+            
+            # Update the raga name to use the top predicted raga if confidence is high enough
+            top_predicted_raga = cnn_prediction["predicted_ragas"][0]
+            if top_predicted_raga["confidence"] > 75:  # 75% threshold for high confidence
+                predicted_raga_name = top_predicted_raga["name"]
+                performance_results["predicted_raga"] = predicted_raga_name
+                
+                # Find the predicted raga info
+                for _, row in raga_df.iterrows():
+                    if row['name_of_the_raag'].lower() == predicted_raga_name.lower():
+                        predicted_raga_info = row.to_dict()
+                        break
+                
+                # Re-evaluate performance against the predicted raga
+                if predicted_raga_info:
+                    predicted_raga_results = evaluate_performance(y_audio, sr, predicted_raga_info)
+                    
+                    # Replace scores with the predicted raga evaluation
+                    performance_results["structure_adherence"] = predicted_raga_results["structure_adherence"]
+                    performance_results["vadi_samvadi_accuracy"] = predicted_raga_results["vadi_samvadi_accuracy"]
+                    performance_results["overall_score"] = predicted_raga_results["overall_score"]
+                    performance_results["feedback"] = predicted_raga_results["feedback"]
+                    
+                    # Add note about score calculation
+                    performance_results["score_basis"] = {
+                        "based_on": "predicted_raga",
+                        "predicted_raga": predicted_raga_name,
+                        "selected_raga": raga_name
+                    }
+            else:
+                performance_results["predicted_raga"] = raga_name
+                performance_results["score_basis"] = {
+                    "based_on": "selected_raga",
+                    "selected_raga": raga_name
+                }
+        else:
+            performance_results["predicted_raga"] = raga_name
+            performance_results["score_basis"] = {
+                "based_on": "selected_raga",
+                "selected_raga": raga_name
+            }
         
         # Save performance to user history
         save_performance_record(username, performance_results)
